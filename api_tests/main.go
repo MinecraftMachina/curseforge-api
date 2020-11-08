@@ -39,7 +39,7 @@ var fixedTransport = &http.Transport{}
 type CustomTransport struct{}
 
 func (CustomTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	log.Println("Requesting: ", r.URL.String())
+	log.Println("Requesting:", r.URL.String())
 	r.Header.Del("X-Forwarded-For") // inserted by httputil.NewSingleHostReverseProxy
 	if DebugPrint {
 		b, err := httputil.DumpRequestOut(r, false)
@@ -59,7 +59,11 @@ func init() {
 	}
 	parsedApiEndpoint = parsed
 	doer, _ := util.NewBaseDoer()
-	globalClient = sling.New().Doer(doer).SetMany(defaultHeaders).Path("http://localhost:" + OpticPort)
+	globalClient = sling.New().
+		Doer(doer).
+		SetMany(defaultHeaders).
+		Path("http://localhost:" + OpticPort).
+		Path(parsed.Path)
 }
 
 func serve() error {
@@ -71,7 +75,7 @@ func serve() error {
 		}
 		proxy.Transport = customTransport
 		proxy.ServeHTTP(w, r)
-		log.Println("Returned: ", r.URL.String())
+		log.Println("Returned:", r.URL.String())
 	})
 	if BypassOptic {
 		return http.ListenAndServe(":"+OpticPort, nil)
@@ -109,8 +113,8 @@ type TestConfig struct {
 }
 
 func runTest(config *TestConfig) error {
-	log.Println("Running test: ", config.requestUrl)
-	request := globalClient.New().Method(config.method).Path(parsedApiEndpoint.Path).Path(config.requestUrl)
+	log.Println("Running test:", config.requestUrl)
+	request := globalClient.New().Method(config.method).Path(config.requestUrl)
 	if config.data != nil {
 		request.BodyJSON(config.data)
 	}
@@ -137,13 +141,13 @@ func testAPI() error {
 		{
 			"Get Addons Database Timestamp",
 			nil,
-			fmt.Sprintf("/api/v2/addon/timestamp"),
+			fmt.Sprintf("addon/timestamp"),
 			"GET",
 		},
 		{
 			"Addon Search",
 			nil,
-			fmt.Sprintf("/api/v2/addon/search"+
+			fmt.Sprintf("addon/search"+
 				"?categoryId=%d"+
 				"&gameId=%d"+
 				"&gameVersion=%s"+
@@ -158,13 +162,13 @@ func testAPI() error {
 		{
 			"Get Addon Info",
 			nil,
-			fmt.Sprintf("/api/v2/addon/%d", 310806),
+			fmt.Sprintf("addon/%d", 310806),
 			"GET",
 		},
 		{
 			"Get Multiple Addons",
 			[]int64{310806, 304026},
-			fmt.Sprintf("/api/v2/addon"),
+			fmt.Sprintf("addon"),
 			"POST",
 		},
 		{
@@ -182,43 +186,43 @@ func testAPI() error {
 				14,
 				14,
 			},
-			fmt.Sprintf("/api/v2/addon/featured"),
+			fmt.Sprintf("addon/featured"),
 			"POST",
 		},
 		{
 			"Get Addon by Fingerprint",
 			[]int64{3028671922},
-			"/api/v2/fingerprint",
+			"fingerprint",
 			"POST",
 		},
 		{
 			"Get Addon Description",
 			nil,
-			fmt.Sprintf("/api/v2/addon/%d/description", 310806),
+			fmt.Sprintf("addon/%d/description", 310806),
 			"GET",
 		},
 		{
 			"Get Addon File Changelog",
 			nil,
-			fmt.Sprintf("/api/v2/addon/%d/file/%d/changelog", 310806, 2657461),
+			fmt.Sprintf("addon/%d/file/%d/changelog", 310806, 2657461),
 			"GET",
 		},
 		{
 			"Get Addon File Download URL",
 			nil,
-			fmt.Sprintf("/api/v2/addon/%d/file/%d/download-url", 296062, 2724357),
+			fmt.Sprintf("addon/%d/file/%d/download-url", 296062, 2724357),
 			"GET",
 		},
 		{
 			"Get Addon File Information",
 			nil,
-			fmt.Sprintf("/api/v2/addon/%d/file/%d", 310806, 2657461),
+			fmt.Sprintf("addon/%d/file/%d", 310806, 2657461),
 			"GET",
 		},
 		{
 			"Get Addon Files",
 			nil,
-			fmt.Sprintf("/api/v2/addon/%d/files", 304026),
+			fmt.Sprintf("addon/%d/files", 304026),
 			"GET",
 		},
 		// ---------------------------------------------------------------------------------------------
@@ -227,23 +231,25 @@ func testAPI() error {
 		{
 			"Get Category Info",
 			nil,
-			fmt.Sprintf("/api/v2/category/%d", 423),
+			fmt.Sprintf("category/%d", 423),
 			"GET",
 		},
 		{
 			"Get Category List",
 			nil,
-			fmt.Sprintf("/api/v2/category"),
+			fmt.Sprintf("category"),
 			"GET",
-		}, {
+		},
+		{
 			"Get Category Section Info",
 			nil,
-			fmt.Sprintf("/api/v2/category/section/%d", 6),
+			fmt.Sprintf("category/section/%d", 6),
 			"GET",
-		}, {
+		},
+		{
 			"Get Category Timestamp",
 			nil,
-			fmt.Sprintf("/api/v2/category/timestamp"),
+			fmt.Sprintf("category/timestamp"),
 			"GET",
 		},
 		// ---------------------------------------------------------------------------------------------
@@ -252,19 +258,19 @@ func testAPI() error {
 		{
 			"Get Game Info",
 			nil,
-			fmt.Sprintf("/api/v2/game/%d", 432),
+			fmt.Sprintf("game/%d", 432),
 			"GET",
 		},
 		{
 			"Get Games List",
 			nil,
-			fmt.Sprintf("/api/v2/game"),
+			fmt.Sprintf("game"),
 			"GET",
 		},
 		{
 			"Get Addon-Supported Games List",
 			nil,
-			fmt.Sprintf("/api/v2/game?supportsAddons"),
+			fmt.Sprintf("game?supportsAddons"),
 			"GET",
 		},
 		// ---------------------------------------------------------------------------------------------
@@ -273,43 +279,43 @@ func testAPI() error {
 		{
 			"Get Minecraft Version Info",
 			nil,
-			fmt.Sprintf("/api/v2/minecraft/version/%s", "1.12.2"),
+			fmt.Sprintf("minecraft/version/%s", "1.12.2"),
 			"GET",
 		},
 		{
 			"Get Minecraft Version List",
 			nil,
-			fmt.Sprintf("/api/v2/minecraft/version"),
+			fmt.Sprintf("minecraft/version"),
 			"GET",
 		},
 		{
 			"Get Minecraft Version Timestamp",
 			nil,
-			fmt.Sprintf("/api/v2/minecraft/version/timestamp"),
+			fmt.Sprintf("minecraft/version/timestamp"),
 			"GET",
 		},
 		{
 			"Get Modloaders for Version",
 			nil,
-			fmt.Sprintf("/api/v2/minecraft/modloader?version=1.12.2"),
+			fmt.Sprintf("minecraft/modloader?version=1.12.2"),
 			"GET",
 		},
 		{
 			"Get Modloader Info",
 			nil,
-			fmt.Sprintf("/api/v2/minecraft/modloader/%s", "forge-12.17.0.1980"),
+			fmt.Sprintf("minecraft/modloader/%s", "forge-12.17.0.1980"),
 			"GET",
 		},
 		{
 			"Get Modloader List",
 			nil,
-			fmt.Sprintf("/api/v2/minecraft/modloader"),
+			fmt.Sprintf("minecraft/modloader"),
 			"GET",
 		},
 		{
 			"Get Modloader Timestamp",
 			nil,
-			fmt.Sprintf("/api/v2/minecraft/modloader/timestamp"),
+			fmt.Sprintf("minecraft/modloader/timestamp"),
 			"GET",
 		},
 	}
