@@ -87,11 +87,12 @@ func serve() error {
 func main() {
 	waitInternetAccess()
 	go func() { log.Fatal(serve()) }()
-	if err := testAPI(); err != nil {
-		log.Println(err)
-	}
 	// wait for last request to be returned to Optic
-	time.Sleep(1 * time.Second)
+	defer time.Sleep(1 * time.Second)
+
+	if err := testAPI(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // e.g. get firewall permission
