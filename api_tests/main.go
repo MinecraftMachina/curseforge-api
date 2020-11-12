@@ -29,7 +29,7 @@ var parsedApiEndpoint *url.URL
 const (
 	apiEndpoint  = "https://addons-ecs.forgesvc.net/api/v2/"
 	DebugPrint   = false // dump requests and responses
-	OpticPort    = "8888"
+	OpticPort    = "8889"
 	BypassOptic  = false
 	RequestDelay = 3 * time.Second // prevent rate limit ban
 )
