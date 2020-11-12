@@ -34,7 +34,7 @@ const (
 	RequestDelay = 3 * time.Second // prevent rate limit ban
 )
 
-var fixedTransport = &http.Transport{}
+var fixedTransport = &http.Transport{Proxy: http.ProxyFromEnvironment}
 
 type CustomTransport struct{}
 
