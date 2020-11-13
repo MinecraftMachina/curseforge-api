@@ -1,18 +1,13 @@
 package main
 
 import (
-	"curseforge-api/util"
 	"fmt"
-	"github.com/ViRb3/sling/v2"
+	"github.com/ViRb3/optic-go"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"os"
 	"time"
 )
 
-var globalClient *sling.Sling
 var defaultHeaders = map[string]string{
 	"Accept-Language": "en-US",
 	"Connection":      "keep-alive",
@@ -23,119 +18,41 @@ var defaultHeaders = map[string]string{
 	"User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) " +
 		"twitch-desktop-electron-platform/1.0.0 Chrome/78.0.3904.130 Electron/7.3.3 Safari/537.36 desklight/8.57.0",
 }
-var customTransport = &CustomTransport{}
-var parsedApiEndpoint *url.URL
 
-const (
-	apiEndpoint  = "https://addons-ecs.forgesvc.net/api/v2/"
-	DebugPrint   = false // dump requests and responses
-	OpticPort    = "8889"
-	BypassOptic  = false
-	RequestDelay = 3 * time.Second // prevent rate limit ban
-)
+type CustomTripper struct{}
 
-var fixedTransport = &http.Transport{Proxy: http.ProxyFromEnvironment}
-
-type CustomTransport struct{}
-
-func (CustomTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	log.Println("Requesting:", r.URL.String())
-	r.Header.Del("X-Forwarded-For") // inserted by httputil.NewSingleHostReverseProxy
-	if DebugPrint {
-		b, err := httputil.DumpRequestOut(r, false)
-		if err != nil {
-			return nil, err
-		}
-		fmt.Println(string(b))
+func (t CustomTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	for key, val := range defaultHeaders {
+		req.Header.Set(key, val)
 	}
-	return fixedTransport.RoundTrip(r)
-}
-
-func init() {
-	parsed, err := url.Parse(apiEndpoint)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	parsedApiEndpoint = parsed
-	doer, _ := util.NewBaseDoer()
-	globalClient = sling.New().
-		Doer(doer).
-		SetMany(defaultHeaders).
-		Path("http://localhost:" + OpticPort).
-		Path(parsed.Path)
-}
-
-func serve() error {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		proxy := httputil.NewSingleHostReverseProxy(parsedApiEndpoint)
-		proxy.Director = func(r *http.Request) {
-			r.Host = parsedApiEndpoint.Host
-			r.URL = parsedApiEndpoint.ResolveReference(r.URL)
-		}
-		proxy.Transport = customTransport
-		proxy.ServeHTTP(w, r)
-		log.Println("Returned:", r.URL.String())
-	})
-	if BypassOptic {
-		return http.ListenAndServe(":"+OpticPort, nil)
-	} else {
-		return http.ListenAndServe(":"+os.Getenv("OPTIC_API_PORT"), nil)
-	}
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 func main() {
-	waitInternetAccess()
-	go func() { log.Fatal(serve()) }()
-	// wait for last request to be returned to Optic
-	defer time.Sleep(1 * time.Second)
-
-	if err := testAPI(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// e.g. get firewall permission
-func waitInternetAccess() {
-	for {
-		_, err := http.Get("https://google.com/")
-		if err == nil {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-}
-
-type TestConfig struct {
-	name       string
-	data       interface{}
-	requestUrl string
-	method     string
-}
-
-func runTest(config *TestConfig) error {
-	log.Println("Running test:", config.requestUrl)
-	request := globalClient.New().Method(config.method).Path(config.requestUrl)
-	if config.data != nil {
-		request.BodyJSON(config.data)
-	}
-	resp, err := request.ReceiveBody()
+	tester, err := opticgo.NewTester(opticgo.Config{
+		ApiUrl:               opticgo.MustUrl("https://addons-ecs.forgesvc.net/api/v2/"),
+		ProxyListenAddr:      "",
+		OpticUrl:             opticgo.MustUrl("http://localhost:8889"),
+		DebugPrint:           false,
+		RoundTripper:         CustomTripper{},
+		InternetCheckTimeout: 10 * time.Second,
+	})
 	if err != nil {
-		return err
+		log.Fatalln(err)
 	}
-	defer resp.Body.Close()
-	if DebugPrint {
-		b, err := httputil.DumpResponse(resp, true)
-		if err != nil {
-			return err
-		}
-		log.Println(string(b))
+
+	errChan, _ := tester.Start(getTests())
+	errText := ""
+	for err := range errChan {
+		errText += err.Error() + "\n"
 	}
-	return nil
+	if errText != "" {
+		log.Fatalln(errText)
+	}
 }
 
-func testAPI() error {
-	var tests = []TestConfig{
+func getTests() []opticgo.TestDefinition {
+	return []opticgo.TestDefinition{
 		// ---------------------------------------------------------------------------------------------
 		// Addon
 		// ---------------------------------------------------------------------------------------------
@@ -320,13 +237,4 @@ func testAPI() error {
 			"GET",
 		},
 	}
-
-	log.Printf("Defined %d tests\n", len(tests))
-	for _, test := range tests {
-		if err := runTest(&test); err != nil {
-			return err
-		}
-		time.Sleep(RequestDelay)
-	}
-	return nil
 }
